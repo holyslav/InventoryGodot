@@ -1,0 +1,332 @@
+[gd_scene load_steps=9 format=2]
+
+[ext_resource path="res://resources/font.tres" type="DynamicFont" id=1]
+[ext_resource path="res://scenes/Item.tscn" type="PackedScene" id=2]
+[ext_resource path="res://scenes/Slot.tscn" type="PackedScene" id=3]
+[ext_resource path="res://resources/graphics/man.png" type="Texture" id=4]
+
+[sub_resource type="Theme" id=1]
+default_font = ExtResource( 1 )
+
+[sub_resource type="GDScript" id=2]
+script/source = "extends Control
+
+export (int, 1, 20) var columns = 8 #кол-во столбцов инвентаря
+export (int, 1, 20) var rows = 4 #кол-во строчек инвентаря
+export (Array, NodePath) var slots_containers
+
+onready var slots = []
+
+const slot_scene = preload(\"res://scenes/Slot.tscn\") #Подгружаем при компиляции сцену слота
+
+onready var inv = $PlayerInv/Inv/InvContent #Хранилище слотов
+onready var titem = $TempItem #Это как раз наш временный итем, он нужен для отображения перетаскивания
+onready var clearButton = $PlayerInv/Inv/Button/Clear
+onready var addButton = $PlayerInv/Inv/Button/Add
+
+onready var rng = RandomNumberGenerator.new() #Инициализация объекта класса рандомайзера
+
+onready var item_dragging = null #Здесь хранится итем при перетаскивании
+onready var prev_slot = null #Слот из которого мы перетаскиваем итем
+
+func _ready():
+	titem.visible = false #скрываем временный итем
+	rng.randomize() #запускаем рандомайзер
+	clearButton.connect(\"pressed\", self, \"clear_inventory\")
+	addButton.connect(\"pressed\", self, \"add_item\")
+	inv.columns = columns #ограничиваем кол-во слолбцов отображения
+	for i in range(columns*rows): #Цикл создания слотов
+		var slot = slot_scene.instance() #Создаём объект слота
+		slot.name = \"Slot_%d\" % i #Задаём ему имя, в целом не обязательное действия, но для отладки удобно
+		slot.get_node(\"Num\").text = str(i) #Как раз тот самый номер слота, если удаляете из сцены слота
+		# текстовое поле, то эту строчку тоже нужно удалить
+		slot.set_action(slot.Actions.NONE)
+		if i == columns*rows-1:
+			slot.set_action(slot.Actions.TRASH)
+		inv.add_child(slot) #Добавление слота в хранилище
+		slots.push_back(slot)
+	
+	for slots_node in slots_containers:
+		for slot in get_node(slots_node).get_children():
+			slots.push_back(slot)
+	
+	for slot in slots:
+		slot.connect(\"accepted\", self, \"slot_accepted\")
+		slot.connect(\"dropped\", self, \"trash_dropped\")
+			
+func slot_accepted(path, data):
+	
+	print(\"accepted \", path, \" \", data)
+
+func trash_dropped(path, data):
+	print(\"dropped \", path, \" \", data)
+
+func clear_inventory(): #Функция очистки хранилища
+	for child in slots: #Пробегаем по чилдам инвентаря
+		child.update_data() #делаем апдейт без параметров
+
+func has_empty_slot(): #Метод проверки наличия хотя бы одной пустой ячеки
+	for child in slots: #Пробегаем по чилдам инвентаря
+		if child.empty():
+			return true
+	return false
+
+func get_empty_slot(): #Метод получения случайной пустой ячеки
+	var slot = null
+	if has_empty_slot(): 
+		#Обязательно нужно проверить, что у нас есть пустые ячейки
+		#Иначе при полном инвентаре будет бесконечный цикл при полном инвентаре и игра зависнет
+		while slot == null: #Ищем случайную пустую ячейку, пока не найдём
+			var temp_slot = slots[(rng.randi_range(0, slots.size()-1))]
+			if temp_slot.empty():
+				slot = temp_slot
+				break
+	return slot
+
+func add_item(): #Слот добавления случайного предмета, который подключен к кнопке
+	var slot = get_empty_slot()
+	if slot:
+		var data = {\"type\":\"\", \"count\": 0}
+		data.type = \"item_type_\" + str(rng.randi_range(1, 8))
+		data.count = rng.randi_range(1, 999)
+		slot.update_data(data)
+
+func find_slot(pos:Vector2, need_data = false): #Метод поиска слота по координатам
+	#второй параметр - необязательный, он говорит функции искать в позиции слот с итемом или нет
+	for c in slots: #Пробегаем по чилдам инвентаря
+		if (need_data and not c.empty()) or (not need_data):
+			if c.get_global_rect().has_point(pos):
+				#Создаём прямоугольник из координат слота и его размеров, чтобы 
+				#легко одним методом проверить находится ли точка в этом прямоугольнике
+				return c
+	return null
+
+func _process(delta):
+	var mouse_pos = get_viewport().get_mouse_position() #Получаем позицию мышки
+	if Input.get_mouse_button_mask() == BUTTON_LEFT: #Проверяем нажата ли левая кнопка мыши
+		if not item_dragging: #если мы уже не тащим элемент
+			var slot = find_slot(mouse_pos, true)#ищем под курсором слот с итемом
+			if slot: #если слот найден
+				item_dragging = slot.item_data #сохраняем в хранилище данные итема
+				titem.set_data(item_dragging) #во временнный итем пихаем данные
+				titem.visible = true #показываем временный итем
+				titem.rect_position = slot.get_global_rect().position #перемещаем временный итем в координаты слота
+				prev_slot = slot #сохраняем слот из которого будем тащить итем
+				slot.update_data() #очищаем слот из которого тащим
+		else: #если мы уже тащим итем, то перемещаем временный итем под курсор, со смещением от половины размера итема(чтобы центр итема был под курсором)
+			titem.rect_position = lerp(titem.rect_position, mouse_pos - titem.rect_size/2, 0.3)
+
+	else: #если кнопка отпущена
+		if item_dragging: #если у нас в хранилище есть итем
+			var slot = find_slot(mouse_pos) #Ищет слот под курсором
+
+			if slot: #если слот найден
+				if slot.check_data(item_dragging): #сразу проверям подходит ли к новому слоту данные, тобишь имеет ли смысл делать проверки дальше
+					if slot.empty(): #если в слот пустой
+						slot.update_data(item_dragging)
+					else: #если слот не пустой, то проверяем подходят ли данные найденного слота для предыдущего
+						if prev_slot.check_data(slot.item_data): #если подходит, то обновляем
+							prev_slot.update_data(slot.item_data)
+							slot.update_data(item_dragging)
+				else:
+					prev_slot.update_data(item_dragging)
+						
+				prev_slot = null #очищаем ссылку на старый слот
+				item_dragging = null #сбрасываем хранилище итема
+				titem.visible = false #скрываем временный итем
+
+"
+
+[sub_resource type="StyleBoxFlat" id=4]
+content_margin_left = 10.0
+content_margin_right = 10.0
+content_margin_top = 10.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id=3]
+content_margin_left = 10.0
+content_margin_right = 10.0
+content_margin_top = 10.0
+content_margin_bottom = 10.0
+
+[node name="Main" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 1
+theme = SubResource( 1 )
+script = SubResource( 2 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+columns = 7
+rows = 5
+slots_containers = [ NodePath("PlayerInv/Player/HBoxContainer/LeftSlots"), NodePath("PlayerInv/Player/HBoxContainer/VBoxContainer/HBoxContainer"), NodePath("PlayerInv/Player/HBoxContainer/RightSlots"), NodePath("PlayerInv/Inv/InvContent") ]
+
+[node name="PlayerInv" type="HBoxContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Player" type="PanelContainer" parent="PlayerInv"]
+margin_right = 300.0
+margin_bottom = 400.0
+rect_min_size = Vector2( 300, 0 )
+custom_styles/panel = SubResource( 4 )
+
+[node name="HBoxContainer" type="HBoxContainer" parent="PlayerInv/Player"]
+margin_left = 10.0
+margin_top = 10.0
+margin_right = 290.0
+margin_bottom = 390.0
+
+[node name="LeftSlots" type="VBoxContainer" parent="PlayerInv/Player/HBoxContainer"]
+margin_right = 50.0
+margin_bottom = 380.0
+custom_constants/separation = 20
+alignment = 1
+
+[node name="Helmet" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
+margin_top = 25.0
+margin_right = 50.0
+margin_bottom = 75.0
+
+[node name="Bandage" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
+margin_top = 95.0
+margin_right = 50.0
+margin_bottom = 145.0
+
+[node name="Chestplate" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
+margin_top = 165.0
+margin_right = 50.0
+margin_bottom = 215.0
+
+[node name="Leggings" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
+margin_top = 235.0
+margin_right = 50.0
+margin_bottom = 285.0
+
+[node name="Bots" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
+margin_top = 305.0
+margin_right = 50.0
+margin_bottom = 355.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PlayerInv/Player/HBoxContainer"]
+margin_left = 54.0
+margin_right = 226.0
+margin_bottom = 380.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Man" type="TextureRect" parent="PlayerInv/Player/HBoxContainer/VBoxContainer"]
+margin_right = 172.0
+margin_bottom = 326.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+texture = ExtResource( 4 )
+expand = true
+stretch_mode = 6
+
+[node name="HBoxContainer" type="HBoxContainer" parent="PlayerInv/Player/HBoxContainer/VBoxContainer"]
+margin_top = 330.0
+margin_right = 172.0
+margin_bottom = 380.0
+custom_constants/separation = 20
+alignment = 1
+
+[node name="LeftHand" parent="PlayerInv/Player/HBoxContainer/VBoxContainer/HBoxContainer" instance=ExtResource( 3 )]
+margin_left = 26.0
+margin_right = 76.0
+margin_bottom = 50.0
+
+[node name="RightHand" parent="PlayerInv/Player/HBoxContainer/VBoxContainer/HBoxContainer" instance=ExtResource( 3 )]
+margin_left = 96.0
+margin_right = 146.0
+margin_bottom = 50.0
+
+[node name="RightSlots" type="VBoxContainer" parent="PlayerInv/Player/HBoxContainer"]
+margin_left = 230.0
+margin_right = 280.0
+margin_bottom = 380.0
+custom_constants/separation = 20
+alignment = 1
+
+[node name="Cloak" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
+margin_top = 25.0
+margin_right = 50.0
+margin_bottom = 75.0
+
+[node name="Bracelet" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
+margin_top = 95.0
+margin_right = 50.0
+margin_bottom = 145.0
+
+[node name="Gloves" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
+margin_top = 165.0
+margin_right = 50.0
+margin_bottom = 215.0
+
+[node name="Diadem" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
+margin_top = 235.0
+margin_right = 50.0
+margin_bottom = 285.0
+
+[node name="Ring" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
+margin_top = 305.0
+margin_right = 50.0
+margin_bottom = 355.0
+
+[node name="Inv" type="PanelContainer" parent="PlayerInv"]
+margin_left = 304.0
+margin_right = 800.0
+margin_bottom = 400.0
+mouse_filter = 1
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_styles/panel = SubResource( 3 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="InvContent" type="GridContainer" parent="PlayerInv/Inv"]
+margin_left = 10.0
+margin_top = 10.0
+margin_right = 486.0
+margin_bottom = 390.0
+custom_constants/vseparation = 16
+custom_constants/hseparation = 16
+columns = 8
+
+[node name="Button" type="HBoxContainer" parent="PlayerInv/Inv"]
+margin_left = 10.0
+margin_top = 360.0
+margin_right = 486.0
+margin_bottom = 390.0
+size_flags_horizontal = 3
+size_flags_vertical = 8
+
+[node name="Add" type="Button" parent="PlayerInv/Inv/Button"]
+margin_right = 236.0
+margin_bottom = 30.0
+rect_min_size = Vector2( 0, 30 )
+size_flags_horizontal = 3
+text = "Add"
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Clear" type="Button" parent="PlayerInv/Inv/Button"]
+margin_left = 240.0
+margin_right = 476.0
+margin_bottom = 30.0
+rect_min_size = Vector2( 0, 30 )
+size_flags_horizontal = 3
+text = "Clear"
+
+[node name="TempItem" parent="." instance=ExtResource( 2 )]
+visible = false
+margin_left = 131.498
+margin_top = 102.908
+margin_right = 181.498
+margin_bottom = 152.908

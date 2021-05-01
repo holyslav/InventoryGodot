@@ -1,0 +1,58 @@
+[gd_scene load_steps=5 format=2]
+
+[ext_resource path="res://resources/font.tres" type="DynamicFont" id=1]
+[ext_resource path="res://resources/graphics/item_type_1.png" type="Texture" id=2]
+
+[sub_resource type="StyleBoxEmpty" id=1]
+
+[sub_resource type="GDScript" id=2]
+script/source = "extends PanelContainer
+
+onready var icon = $Icon
+onready var count = $Count
+
+const path_to_items_icons = \"res://resources/graphics/%s.png\"
+
+func set_data(item_data):
+	icon.texture = load(path_to_items_icons % item_data.type) #Динамическая загрузка иконки
+	count.text = str(item_data.count)
+"
+
+[node name="Item" type="PanelContainer"]
+margin_left = 2.0
+margin_top = 2.0
+margin_right = 52.0
+margin_bottom = 52.0
+rect_min_size = Vector2( 50, 50 )
+rect_pivot_offset = Vector2( 38, 38 )
+mouse_filter = 1
+custom_styles/panel = SubResource( 1 )
+script = SubResource( 2 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Icon" type="TextureRect" parent="."]
+margin_right = 50.0
+margin_bottom = 50.0
+rect_min_size = Vector2( 50, 50 )
+size_flags_horizontal = 3
+size_flags_vertical = 3
+texture = ExtResource( 2 )
+expand = true
+stretch_mode = 6
+
+[node name="Count" type="Label" parent="."]
+margin_right = 50.0
+margin_bottom = 50.0
+rect_min_size = Vector2( 25, 15 )
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_fonts/font = ExtResource( 1 )
+text = "123"
+align = 2
+valign = 2
+clip_text = true
+__meta__ = {
+"_edit_use_anchors_": false
+}
