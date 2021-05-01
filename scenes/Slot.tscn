@@ -26,18 +26,18 @@ signal accepted(path, data) #Сигнал помещения итема в сл�
 export (Array) var available_types = [\"all\"] 
 #массив для ограничения доступности типов предметов для этой ячейки
 
-enum Actions {NONE, TRASH} #Перечисление с допустимиы действиями слота
-var cur_act = Actions.NONE #установка переменной действия слота в стандартное положение
+enum Actions {TRASH, NONE = -1} #Перечисление с допустимиы действиями слота
+var cur_act #действие слота при событиях
 
 onready var item = $Item
 
 var item_data = null #Здесь будет словарь с данными предмета
 
 func _ready():
-	set_action()
+	set_action(Actions.NONE)
 	update_data()
 
-func set_action(new_value = Actions.NONE):
+func set_action(new_value):
 	cur_act = new_value
 	
 	$Item.visible = false
@@ -47,7 +47,7 @@ func set_action(new_value = Actions.NONE):
 	match cur_act:
 		Actions.NONE:
 			$Item.visible = true
-#			$Num.visible = true
+			$Num.visible = true
 		Actions.TRASH:
 			$Trash.visible = true
 
@@ -55,12 +55,12 @@ func empty():
 	return item_data == null
 
 func check_data(data):
-	if cur_act:
+	if cur_act == Actions.TRASH:
 		return true
 	return \"all\" in available_types or data.type in available_types
 
 func update_data(data = null):
-	if data and cur_act:
+	if data and cur_act == Actions.TRASH:
 		emit_signal(\"dropped\", get_path(), data)
 		return true
 	item.visible = data != null
@@ -97,27 +97,24 @@ __meta__ = {
 [node name="Num" type="Label" parent="."]
 margin_left = 2.0
 margin_top = 2.0
-margin_right = 58.0
-margin_bottom = 58.0
+margin_right = 52.0
+margin_bottom = 52.0
 rect_min_size = Vector2( 50, 50 )
 mouse_filter = 1
 size_flags_horizontal = 3
 size_flags_vertical = 1
 custom_fonts/font = SubResource( 3 )
-text = "1"
 align = 1
 valign = 1
 
 [node name="Trash" type="TextureRect" parent="."]
 margin_left = 2.0
 margin_top = 2.0
-margin_right = 58.0
-margin_bottom = 58.0
+margin_right = 52.0
+margin_bottom = 52.0
 rect_min_size = Vector2( 50, 50 )
 texture = ExtResource( 3 )
 expand = true
 stretch_mode = 6
 
 [node name="Item" parent="." instance=ExtResource( 1 )]
-margin_right = 58.0
-margin_bottom = 58.0

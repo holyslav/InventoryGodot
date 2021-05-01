@@ -13,9 +13,9 @@ script/source = "extends Control
 
 export (int, 1, 20) var columns = 8 #кол-во столбцов инвентаря
 export (int, 1, 20) var rows = 4 #кол-во строчек инвентаря
-export (Array, NodePath) var slots_containers
+export (Array, NodePath) var slots_containers # Экспортная переменная с массивом хранилищ слотов
 
-onready var slots = []
+onready var slots = [] #Массив слотов
 
 const slot_scene = preload(\"res://scenes/Slot.tscn\") #Подгружаем при компиляции сцену слота
 
@@ -40,13 +40,12 @@ func _ready():
 		slot.name = \"Slot_%d\" % i #Задаём ему имя, в целом не обязательное действия, но для отладки удобно
 		slot.get_node(\"Num\").text = str(i) #Как раз тот самый номер слота, если удаляете из сцены слота
 		# текстовое поле, то эту строчку тоже нужно удалить
-		slot.set_action(slot.Actions.NONE)
+		inv.add_child(slot) #Добавление слота в хранилище
 		if i == columns*rows-1:
 			slot.set_action(slot.Actions.TRASH)
-		inv.add_child(slot) #Добавление слота в хранилище
 		slots.push_back(slot)
 	
-	for slots_node in slots_containers:
+	for slots_node in slots_containers: #Массив для перебора всех хранилищ слотов и помещении их в массив для удобства дальнейшего взаимодействия
 		for slot in get_node(slots_node).get_children():
 			slots.push_back(slot)
 	
@@ -55,19 +54,18 @@ func _ready():
 		slot.connect(\"dropped\", self, \"trash_dropped\")
 			
 func slot_accepted(path, data):
-	
 	print(\"accepted \", path, \" \", data)
 
 func trash_dropped(path, data):
 	print(\"dropped \", path, \" \", data)
 
 func clear_inventory(): #Функция очистки хранилища
-	for child in slots: #Пробегаем по чилдам инвентаря
+	for child in slots: #Пробегаем по всем слотам доступным
 		child.update_data() #делаем апдейт без параметров
 
 func has_empty_slot(): #Метод проверки наличия хотя бы одной пустой ячеки
-	for child in slots: #Пробегаем по чилдам инвентаря
-		if child.empty():
+	for child in slots: #Пробегаем по всем слотам доступным
+		if child.empty() and child.cur_act != child.Actions.TRASH:
 			return true
 	return false
 
@@ -78,7 +76,7 @@ func get_empty_slot(): #Метод получения случайной пус�
 		#Иначе при полном инвентаре будет бесконечный цикл при полном инвентаре и игра зависнет
 		while slot == null: #Ищем случайную пустую ячейку, пока не найдём
 			var temp_slot = slots[(rng.randi_range(0, slots.size()-1))]
-			if temp_slot.empty():
+			if temp_slot.empty() and temp_slot.cur_act != temp_slot.Actions.TRASH:
 				slot = temp_slot
 				break
 	return slot
@@ -182,46 +180,41 @@ margin_right = 290.0
 margin_bottom = 390.0
 
 [node name="LeftSlots" type="VBoxContainer" parent="PlayerInv/Player/HBoxContainer"]
-margin_right = 50.0
+margin_right = 54.0
 margin_bottom = 380.0
 custom_constants/separation = 20
 alignment = 1
 
 [node name="Helmet" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
-margin_top = 25.0
-margin_right = 50.0
-margin_bottom = 75.0
+margin_top = 15.0
+margin_bottom = 69.0
 
 [node name="Bandage" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
-margin_top = 95.0
-margin_right = 50.0
-margin_bottom = 145.0
+margin_top = 89.0
+margin_bottom = 143.0
 
 [node name="Chestplate" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
-margin_top = 165.0
-margin_right = 50.0
-margin_bottom = 215.0
+margin_top = 163.0
+margin_bottom = 217.0
 
 [node name="Leggings" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
-margin_top = 235.0
-margin_right = 50.0
-margin_bottom = 285.0
+margin_top = 237.0
+margin_bottom = 291.0
 
 [node name="Bots" parent="PlayerInv/Player/HBoxContainer/LeftSlots" instance=ExtResource( 3 )]
-margin_top = 305.0
-margin_right = 50.0
-margin_bottom = 355.0
+margin_top = 311.0
+margin_bottom = 365.0
 
 [node name="VBoxContainer" type="VBoxContainer" parent="PlayerInv/Player/HBoxContainer"]
-margin_left = 54.0
-margin_right = 226.0
+margin_left = 58.0
+margin_right = 222.0
 margin_bottom = 380.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
 [node name="Man" type="TextureRect" parent="PlayerInv/Player/HBoxContainer/VBoxContainer"]
-margin_right = 172.0
-margin_bottom = 326.0
+margin_right = 164.0
+margin_bottom = 322.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
 texture = ExtResource( 4 )
@@ -229,53 +222,46 @@ expand = true
 stretch_mode = 6
 
 [node name="HBoxContainer" type="HBoxContainer" parent="PlayerInv/Player/HBoxContainer/VBoxContainer"]
-margin_top = 330.0
-margin_right = 172.0
+margin_top = 326.0
+margin_right = 164.0
 margin_bottom = 380.0
 custom_constants/separation = 20
 alignment = 1
 
 [node name="LeftHand" parent="PlayerInv/Player/HBoxContainer/VBoxContainer/HBoxContainer" instance=ExtResource( 3 )]
-margin_left = 26.0
-margin_right = 76.0
-margin_bottom = 50.0
+margin_left = 18.0
+margin_right = 72.0
 
 [node name="RightHand" parent="PlayerInv/Player/HBoxContainer/VBoxContainer/HBoxContainer" instance=ExtResource( 3 )]
-margin_left = 96.0
+margin_left = 92.0
 margin_right = 146.0
-margin_bottom = 50.0
 
 [node name="RightSlots" type="VBoxContainer" parent="PlayerInv/Player/HBoxContainer"]
-margin_left = 230.0
+margin_left = 226.0
 margin_right = 280.0
 margin_bottom = 380.0
 custom_constants/separation = 20
 alignment = 1
 
 [node name="Cloak" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
-margin_top = 25.0
-margin_right = 50.0
-margin_bottom = 75.0
+margin_top = 15.0
+margin_bottom = 69.0
 
 [node name="Bracelet" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
-margin_top = 95.0
-margin_right = 50.0
-margin_bottom = 145.0
+margin_top = 89.0
+margin_bottom = 143.0
 
 [node name="Gloves" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
-margin_top = 165.0
-margin_right = 50.0
-margin_bottom = 215.0
+margin_top = 163.0
+margin_bottom = 217.0
 
 [node name="Diadem" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
-margin_top = 235.0
-margin_right = 50.0
-margin_bottom = 285.0
+margin_top = 237.0
+margin_bottom = 291.0
 
 [node name="Ring" parent="PlayerInv/Player/HBoxContainer/RightSlots" instance=ExtResource( 3 )]
-margin_top = 305.0
-margin_right = 50.0
-margin_bottom = 355.0
+margin_top = 311.0
+margin_bottom = 365.0
 
 [node name="Inv" type="PanelContainer" parent="PlayerInv"]
 margin_left = 304.0
