@@ -70,16 +70,14 @@ func has_empty_slot(): #Метод проверки наличия хотя бы
 	return false
 
 func get_empty_slot(): #Метод получения случайной пустой ячеки
-	var slot = null
+	var rand_slot = null
 	if has_empty_slot(): 
-		#Обязательно нужно проверить, что у нас есть пустые ячейки
-		#Иначе при полном инвентаре будет бесконечный цикл при полном инвентаре и игра зависнет
-		while slot == null: #Ищем случайную пустую ячейку, пока не найдём
-			var temp_slot = slots[(rng.randi_range(0, slots.size()-1))]
-			if temp_slot.empty() and temp_slot.cur_act != temp_slot.Actions.TRASH:
-				slot = temp_slot
-				break
-	return slot
+		var empty_slots = [] #Массив пустых слотов
+		for slot in slots: #Перебираем все слоты и ищем пустые и слоты с недопустимыми экшенами
+			if slot.empty() and slot.cur_act != slot.Actions.TRASH:
+				empty_slots.push_back(slot)
+		rand_slot = empty_slots[(rng.randi_range(0, empty_slots.size()-1))] #выбираем случайный слот из пустых
+	return rand_slot
 
 func add_item(): #Слот добавления случайного предмета, который подключен к кнопке
 	var slot = get_empty_slot()
@@ -135,13 +133,13 @@ func _process(delta):
 
 "
 
-[sub_resource type="StyleBoxFlat" id=4]
+[sub_resource type="StyleBoxFlat" id=3]
 content_margin_left = 10.0
 content_margin_right = 10.0
 content_margin_top = 10.0
 content_margin_bottom = 10.0
 
-[sub_resource type="StyleBoxFlat" id=3]
+[sub_resource type="StyleBoxFlat" id=4]
 content_margin_left = 10.0
 content_margin_right = 10.0
 content_margin_top = 10.0
@@ -171,7 +169,7 @@ __meta__ = {
 margin_right = 300.0
 margin_bottom = 400.0
 rect_min_size = Vector2( 300, 0 )
-custom_styles/panel = SubResource( 4 )
+custom_styles/panel = SubResource( 3 )
 
 [node name="HBoxContainer" type="HBoxContainer" parent="PlayerInv/Player"]
 margin_left = 10.0
@@ -270,7 +268,7 @@ margin_bottom = 400.0
 mouse_filter = 1
 size_flags_horizontal = 3
 size_flags_vertical = 3
-custom_styles/panel = SubResource( 3 )
+custom_styles/panel = SubResource( 4 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
