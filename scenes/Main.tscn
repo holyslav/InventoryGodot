@@ -13,24 +13,21 @@ script/source = "extends Control
 
 export (int, 1, 20) var columns = 8 #кол-во столбцов инвентаря
 export (int, 1, 20) var rows = 4 #кол-во строчек инвентаря
-export (Array, NodePath) var slots_containers # Экспортная переменная с массивом хранилищ слотов
-
-onready var slots = [] #Массив слотов
 
 const slot_scene = preload(\"res://scenes/Slot.tscn\") #Подгружаем при компиляции сцену слота
 
-onready var inv = $PlayerInv/Inv/InvContent #Хранилище слотов
-onready var titem = $TempItem #Это как раз наш временный итем, он нужен для отображения перетаскивания
+onready var inv = $PlayerInv/Inv/InvContent
+onready var item_dragged_view = $DraggedItem
 onready var clearButton = $PlayerInv/Inv/Button/Clear
 onready var addButton = $PlayerInv/Inv/Button/Add
 
 onready var rng = RandomNumberGenerator.new() #Инициализация объекта класса рандомайзера
 
-onready var item_dragging = null #Здесь хранится итем при перетаскивании
-onready var prev_slot = null #Слот из которого мы перетаскиваем итем
+onready var item_dragged = null #Здесь хранится итем при перетаскивании
+onready var slot_dragged = null #Слот из которого мы перетаскиваем итем
 
 func _ready():
-	titem.visible = false #скрываем временный итем
+	item_dragged_view.visible = false #скрываем временный итем
 	rng.randomize() #запускаем рандомайзер
 	clearButton.connect(\"pressed\", self, \"clear_inventory\")
 	addButton.connect(\"pressed\", self, \"add_item\")
@@ -42,14 +39,9 @@ func _ready():
 		# текстовое поле, то эту строчку тоже нужно удалить
 		inv.add_child(slot) #Добавление слота в хранилище
 		if i == columns*rows-1:
-			slot.set_action(slot.Actions.TRASH)
-		slots.push_back(slot)
-	
-	for slots_node in slots_containers: #Массив для перебора всех хранилищ слотов и помещении их в массив для удобства дальнейшего взаимодействия
-		for slot in get_node(slots_node).get_children():
-			slots.push_back(slot)
-	
-	for slot in slots:
+			slot.set_action(slot.ACTIONS.TRASH)
+
+	for slot in get_tree().get_nodes_in_group(\"Slots\"):
 		slot.connect(\"accepted\", self, \"slot_accepted\")
 		slot.connect(\"dropped\", self, \"trash_dropped\")
 			
@@ -60,12 +52,11 @@ func trash_dropped(path, data):
 	print(\"dropped \", path, \" \", data)
 
 func clear_inventory(): #Функция очистки хранилища
-	for child in slots: #Пробегаем по всем слотам доступным
-		child.update_data() #делаем апдейт без параметров
+	get_tree().call_group(\"Slots\", \"update_data\")
 
 func has_empty_slot(): #Метод проверки наличия хотя бы одной пустой ячеки
-	for child in slots: #Пробегаем по всем слотам доступным
-		if child.empty() and child.cur_act != child.Actions.TRASH:
+	for slot in get_tree().get_nodes_in_group(\"Slots\"): #Пробегаем по всем слотам доступным
+		if slot.empty() and slot.current_action != slot.ACTIONS.TRASH:
 			return true
 	return false
 
@@ -73,8 +64,8 @@ func get_empty_slot(): #Метод получения случайной пус�
 	var rand_slot = null
 	if has_empty_slot(): 
 		var empty_slots = [] #Массив пустых слотов
-		for slot in slots: #Перебираем все слоты и ищем пустые и слоты с недопустимыми экшенами
-			if slot.empty() and slot.cur_act != slot.Actions.TRASH:
+		for slot in get_tree().get_nodes_in_group(\"Slots\"): #Перебираем все слоты и ищем пустые и слоты с недопустимыми экшенами
+			if slot.empty() and slot.current_action != slot.ACTIONS.TRASH:
 				empty_slots.push_back(slot)
 		rand_slot = empty_slots[(rng.randi_range(0, empty_slots.size()-1))] #выбираем случайный слот из пустых
 	return rand_slot
@@ -89,7 +80,7 @@ func add_item(): #Слот добавления случайного предм�
 
 func find_slot(pos:Vector2, need_data = false): #Метод поиска слота по координатам
 	#второй параметр - необязательный, он говорит функции искать в позиции слот с итемом или нет
-	for c in slots: #Пробегаем по чилдам инвентаря
+	for c in get_tree().get_nodes_in_group(\"Slots\"): #Пробегаем по чилдам инвентаря
 		if (need_data and not c.empty()) or (not need_data):
 			if c.get_global_rect().has_point(pos):
 				#Создаём прямоугольник из координат слота и его размеров, чтобы 
@@ -98,39 +89,49 @@ func find_slot(pos:Vector2, need_data = false): #Метод поиска сло�
 	return null
 
 func _process(delta):
-	var mouse_pos = get_viewport().get_mouse_position() #Получаем позицию мышки
 	if Input.get_mouse_button_mask() == BUTTON_LEFT: #Проверяем нажата ли левая кнопка мыши
-		if not item_dragging: #если мы уже не тащим элемент
-			var slot = find_slot(mouse_pos, true)#ищем под курсором слот с итемом
-			if slot: #если слот найден
-				item_dragging = slot.item_data #сохраняем в хранилище данные итема
-				titem.set_data(item_dragging) #во временнный итем пихаем данные
-				titem.visible = true #показываем временный итем
-				titem.rect_position = slot.get_global_rect().position #перемещаем временный итем в координаты слота
-				prev_slot = slot #сохраняем слот из которого будем тащить итем
-				slot.update_data() #очищаем слот из которого тащим
-		else: #если мы уже тащим итем, то перемещаем временный итем под курсор, со смещением от половины размера итема(чтобы центр итема был под курсором)
-			titem.rect_position = lerp(titem.rect_position, mouse_pos - titem.rect_size/2, 0.3)
-
+		if not item_dragged:
+			_start_drag()
+		else:
+			_update_drag()
 	else: #если кнопка отпущена
-		if item_dragging: #если у нас в хранилище есть итем
-			var slot = find_slot(mouse_pos) #Ищет слот под курсором
+		if item_dragged:
+			_stop_drag()
 
-			if slot: #если слот найден
-				if slot.check_data(item_dragging): #сразу проверям подходит ли к новому слоту данные, тобишь имеет ли смысл делать проверки дальше
-					if slot.empty(): #если в слот пустой
-						slot.update_data(item_dragging)
-					else: #если слот не пустой, то проверяем подходят ли данные найденного слота для предыдущего
-						if prev_slot.check_data(slot.item_data): #если подходит, то обновляем
-							prev_slot.update_data(slot.item_data)
-							slot.update_data(item_dragging)
-				else:
-					prev_slot.update_data(item_dragging)
-						
-				prev_slot = null #очищаем ссылку на старый слот
-				item_dragging = null #сбрасываем хранилище итема
-				titem.visible = false #скрываем временный итем
+func _start_drag():
+	var mouse_pos = get_viewport().get_mouse_position()
+	var slot = find_slot(mouse_pos, true)#ищем под курсором слот с итемом
+	if slot: #если слот найден
+		item_dragged = slot.item_data #сохраняем в хранилище данные итема
+		item_dragged_view.set_data(item_dragged) #во временнный итем пихаем данные
+		item_dragged_view.visible = true #показываем временный итем
+		item_dragged_view.rect_position = slot.get_global_rect().position #перемещаем временный итем в координаты слота
+		slot_dragged = slot #сохраняем слот из которого будем тащить итем
+		slot.update_data() #очищаем слот из которого тащим
 
+func _update_drag():
+	var mouse_pos = get_viewport().get_mouse_position()
+	#перемещаем временный итем под курсор, со смещением от половины размера итема(чтобы центр итема был под курсором)
+	item_dragged_view.rect_position = lerp(item_dragged_view.rect_position, mouse_pos - item_dragged_view.rect_size/2, 0.3)
+	
+func _stop_drag():
+	var mouse_pos = get_viewport().get_mouse_position()
+	var slot = find_slot(mouse_pos) #Ищет слот под курсором
+	if slot: #если слот найден
+		if slot.check_data(item_dragged): #сразу проверям подходит ли к новому слоту данные, тобишь имеет ли смысл делать проверки дальше
+			if slot.empty(): #если в слот пустой
+				slot.update_data(item_dragged)
+			else: #если слот не пустой, то проверяем подходят ли данные найденного слота для предыдущего
+				if slot_dragged.check_data(slot.item_data): #если подходит, то обновляем
+					slot_dragged.update_data(slot.item_data)
+					slot.update_data(item_dragged)
+		else:
+			slot_dragged.update_data(item_dragged)
+		
+		slot_dragged = null #очищаем ссылку на старый слот
+		item_dragged = null #сбрасываем хранилище итема
+		item_dragged_view.visible = false #скрываем временный итем
+		
 "
 
 [sub_resource type="StyleBoxFlat" id=3]
@@ -156,7 +157,6 @@ __meta__ = {
 }
 columns = 7
 rows = 5
-slots_containers = [ NodePath("PlayerInv/Player/HBoxContainer/LeftSlots"), NodePath("PlayerInv/Player/HBoxContainer/VBoxContainer/HBoxContainer"), NodePath("PlayerInv/Player/HBoxContainer/RightSlots"), NodePath("PlayerInv/Inv/InvContent") ]
 
 [node name="PlayerInv" type="HBoxContainer" parent="."]
 anchor_right = 1.0
@@ -308,7 +308,7 @@ rect_min_size = Vector2( 0, 30 )
 size_flags_horizontal = 3
 text = "Clear"
 
-[node name="TempItem" parent="." instance=ExtResource( 2 )]
+[node name="DraggedItem" parent="." instance=ExtResource( 2 )]
 visible = false
 margin_left = 131.498
 margin_top = 102.908

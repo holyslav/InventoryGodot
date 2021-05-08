@@ -26,41 +26,43 @@ signal accepted(path, data) #Сигнал помещения итема в сл�
 export (Array) var available_types = [\"all\"] 
 #массив для ограничения доступности типов предметов для этой ячейки
 
-enum Actions {TRASH, NONE = -1} #Перечисление с допустимиы действиями слота
-var cur_act #действие слота при событиях
+enum ACTIONS {TRASH, NONE = -1} #Перечисление с допустимиы действиями слота
+
+export (ACTIONS) var current_action = ACTIONS.NONE
 
 onready var item = $Item
 
 var item_data = null #Здесь будет словарь с данными предмета
 
 func _ready():
-	set_action(Actions.NONE)
+	set_action(ACTIONS.NONE)
 	update_data()
+	add_to_group(\"Slots\")
 
 func set_action(new_value):
-	cur_act = new_value
+	current_action = new_value
 	
 	$Item.visible = false
 	$Trash.visible = false
 	$Num.visible = false
 	
-	match cur_act:
-		Actions.NONE:
+	match current_action:
+		ACTIONS.NONE:
 			$Item.visible = true
 			$Num.visible = true
-		Actions.TRASH:
+		ACTIONS.TRASH:
 			$Trash.visible = true
 
 func empty():
 	return item_data == null
 
 func check_data(data):
-	if cur_act == Actions.TRASH:
+	if current_action == ACTIONS.TRASH:
 		return true
 	return \"all\" in available_types or data.type in available_types
 
 func update_data(data = null):
-	if data and cur_act == Actions.TRASH:
+	if data and current_action == ACTIONS.TRASH:
 		emit_signal(\"dropped\", get_path(), data)
 		return true
 	item.visible = data != null
